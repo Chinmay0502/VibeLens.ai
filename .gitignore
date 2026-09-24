@@ -1,0 +1,43 @@
+# =========================
+# Backend
+# =========================
+
+backend/.env
+backend/venv/
+backend/.venv/
+backend/env/
+backend/render-test/
+
+backend/__pycache__/
+backend/**/*.py[cod]
+backend/**/*.pyo
+
+backend/downloads/
+backend/**/*.wav
+backend/**/*.mp3
+backend/**/*.m4a
+backend/**/*.webm
+backend/**/*.mp4
+
+
+# =========================
+# Frontend
+# =========================
+
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+
+# =========================
+# IDE / OS
+# =========================
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+backend/vector_db/
