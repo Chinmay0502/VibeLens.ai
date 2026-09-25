@@ -42,9 +42,8 @@ print("DENO PATH:", shutil.which("deno"))
 
 try:
     print("DENO VERSION:", subprocess.check_output(
-        ["/opt/render/.deno/bin/deno", "--version"],
-        text=True
-    ))
+    ["/opt/render/project/src/.deno/bin/deno", "--version"],
+    text=True))
 except Exception as e:
     print("DENO CHECK FAILED:", e)
 
