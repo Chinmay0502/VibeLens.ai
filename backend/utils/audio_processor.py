@@ -15,7 +15,7 @@ def download_youtube_audio(url: str) -> str:
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": output_path,
-        
+        "cookiefile": "/etc/secrets/cookies.txt",
         # Explicitly tell yt-dlp exactly where Deno is.
         "js_runtimes": {
             "deno": {
