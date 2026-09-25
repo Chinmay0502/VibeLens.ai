@@ -1,3 +1,5 @@
+import shutil
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Lock
@@ -36,6 +38,15 @@ print(f"Sarvam API key loaded: {bool(os.getenv('SARVAM_API_KEY'))}")
 
 app = FastAPI(title="VibeLens AI Backend")
 
+print("DENO PATH:", shutil.which("deno"))
+
+try:
+    print("DENO VERSION:", subprocess.check_output(
+        ["/opt/render/.deno/bin/deno", "--version"],
+        text=True
+    ))
+except Exception as e:
+    print("DENO CHECK FAILED:", e)
 
 app.add_middleware(
     CORSMiddleware,
