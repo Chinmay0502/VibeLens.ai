@@ -50,15 +50,26 @@ except Exception as e:
 
 try:
     import yt_dlp
+    import importlib.util
+
     print("YT-DLP VERSION:", yt_dlp.version.__version__)
-
-    from yt_dlp.plugins import directories
-    print("YT-DLP PLUGIN DIRECTORIES:", directories)
-
     print("YT-DLP PACKAGE LOCATION:", yt_dlp.__file__)
+
+    plugin_spec = importlib.util.find_spec(
+        "yt_dlp_plugins.extractor"
+    )
+
+    print("YT-DLP EXTRACTOR PLUGIN SPEC:", plugin_spec)
+
+    bgutil_spec = importlib.util.find_spec(
+        "yt_dlp_plugins.extractor.youtubepot_bgutilhttp"
+    )
+
+    print("BGUTIL HTTP PLUGIN SPEC:", bgutil_spec)
+
 except Exception as e:
     print("YT-DLP PLUGIN CHECK FAILED:", repr(e))
-
+    
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
