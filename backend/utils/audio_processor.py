@@ -1,5 +1,6 @@
 import os
 import yt_dlp
+import shutil
 from pydub import AudioSegment
 
 DOWNLOAD_DIR = "downloads"
@@ -11,11 +12,12 @@ def download_youtube_audio(url: str) -> str:
         DOWNLOAD_DIR,
         "%(title)s.%(ext)s"
     )
-
+    cookie_path = "/tmp/vibelens_youtube_cookies.txt"
+    shutil.copyfile("/etc/secrets/cookies.txt", cookie_path)
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": output_path,
-        "cookiefile": "/etc/secrets/cookies.txt",
+        "cookiefile": cookie_path,
         # Explicitly tell yt-dlp exactly where Deno is.
         "js_runtimes": {
             "deno": {
