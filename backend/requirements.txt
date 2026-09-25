@@ -4,7 +4,7 @@ python-dotenv==1.2.3
 pydantic==2.13.5
 
 requests==2.34.2
-yt-dlp==2026.8.19
+yt-dlp[default]==2026.8.19
 pydub==0.25.1
 audioop-lts
 
