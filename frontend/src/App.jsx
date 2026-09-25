@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+
 import {
   Play,
   Sparkles,
@@ -34,6 +35,7 @@ import {
   Volume2,
   Lock,
   XCircle,
+  Upload,
 } from "lucide-react";
 
 /* =========================================================
@@ -154,6 +156,7 @@ function ParticleBackground() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
+
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
@@ -242,7 +245,6 @@ function ParticleBackground() {
 
 function formatElapsed(seconds) {
   const safeSeconds = Math.max(0, Number(seconds) || 0);
-
   const minutes = Math.floor(safeSeconds / 60);
   const remainingSeconds = safeSeconds % 60;
 
@@ -295,10 +297,12 @@ function parseActionItems(value) {
             item?.action ||
             item?.description ||
             "Task",
+
           owner:
             item?.owner ||
             item?.assignee ||
             "Not specified",
+
           deadline:
             item?.deadline ||
             item?.due ||
@@ -327,6 +331,92 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("summary");
   const [sourceInput, setSourceInput] = useState("");
   const [language, setLanguage] = useState("english");
+
+  /* =======================================================
+     NEW SOURCE / FILE UPLOAD STATE
+  ======================================================= */
+
+  const [sourceType, setSourceType] = useState("youtube");
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+
+  const fileInputRef = useRef(null);
+
+  const allowedFileTypes = [
+    "audio/mpeg",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/mp4",
+    "audio/x-m4a",
+    "video/mp4",
+    "video/quicktime",
+    "video/webm",
+  ];
+
+  const allowedExtensions = [
+    ".mp3",
+    ".wav",
+    ".m4a",
+    ".mp4",
+    ".mov",
+    ".webm",
+  ];
+
+  const isAllowedFile = (file) => {
+    if (!file) return false;
+
+    const lowerName = file.name.toLowerCase();
+
+    return (
+      allowedFileTypes.includes(file.type) ||
+      allowedExtensions.some((extension) =>
+        lowerName.endsWith(extension)
+      )
+    );
+  };
+
+  const selectFile = (file) => {
+    if (!file) return;
+
+    if (!isAllowedFile(file)) {
+      setPipelineError(
+        "Unsupported file type. Please upload MP3, WAV, M4A, MP4, MOV, or WEBM."
+      );
+
+      setSelectedFile(null);
+      return;
+    }
+
+    setPipelineError(null);
+    setSelectedFile(file);
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+
+    if (file) {
+      selectFile(file);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+
+    const file = e.dataTransfer.files?.[0];
+
+    if (file) {
+      selectFile(file);
+    }
+  };
+
+  const removeSelectedFile = () => {
+    setSelectedFile(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   /* =======================================================
      PIPELINE STATE
@@ -387,6 +477,7 @@ export default function App() {
 
   const [copied, setCopied] = useState(false);
   const [downloaded, setDownloaded] = useState(false);
+
   const [transcriptSearch, setTranscriptSearch] =
     useState("");
 
@@ -644,12 +735,34 @@ export default function App() {
   const handleStartProcessing = async (e) => {
     e.preventDefault();
 
-    const source = sourceInput.trim();
+    if (sourceType === "youtube") {
+      const source = sourceInput.trim();
 
-    if (!source) {
+      if (!source) {
+        return;
+      }
+
+      await startYouTubeProcessing(source);
       return;
     }
 
+    if (!selectedFile) {
+      setPipelineError(
+        "Please select an audio or video file first."
+      );
+
+      return;
+    }
+
+    await startFileProcessing(selectedFile);
+  };
+
+  /* =======================================================
+     START YOUTUBE PROCESSING
+     EXISTING FLOW PRESERVED
+  ======================================================= */
+
+  const startYouTubeProcessing = async (source) => {
     /*
       IMPORTANT:
       Store this in a local variable so polling uses the
@@ -659,11 +772,8 @@ export default function App() {
     const startedAt = Date.now();
 
     setPipelineState("processing");
-
     setCurrentStepIndex(0);
-
     setCurrentBackendStage("queued");
-
     setProcessingPercent(0);
 
     setProcessingMessage(
@@ -677,15 +787,10 @@ export default function App() {
     );
 
     setElapsedSeconds(0);
-
     setResultData(null);
-
     setJobId(null);
-
     setActiveTab("summary");
-
     setTranscriptSearch("");
-
     setChatInput("");
 
     setChatMessages([
@@ -726,12 +831,10 @@ export default function App() {
           `${API_BASE}/api/process`,
           {
             method: "POST",
-
             headers: {
               "Content-Type":
                 "application/json",
             },
-
             body: JSON.stringify({
               source,
               language,
@@ -822,41 +925,183 @@ export default function App() {
   };
 
   /* =======================================================
+     START FILE PROCESSING
+  ======================================================= */
+
+  const startFileProcessing = async (file) => {
+    const startedAt = Date.now();
+
+    setPipelineState("processing");
+    setCurrentStepIndex(0);
+    setCurrentBackendStage("queued");
+    setProcessingPercent(0);
+
+    setProcessingMessage(
+      "Uploading your media..."
+    );
+
+    setPipelineError(null);
+
+    setProcessingStartedAt(
+      startedAt
+    );
+
+    setElapsedSeconds(0);
+    setResultData(null);
+    setJobId(null);
+    setActiveTab("summary");
+    setTranscriptSearch("");
+    setChatInput("");
+
+    setChatMessages([
+      {
+        sender: "bot",
+        text:
+          "Hello! I'm your VibeLens AI Assistant. Once your file is processed, you can ask me anything about the transcript.",
+      },
+    ]);
+
+    setTerminalLogs([
+      "[INIT] Starting VibeLens file analysis",
+      `[FILE] ${file.name}`,
+      `[SIZE] ${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+      `[LANGUAGE] ${language.toUpperCase()}`,
+      "[BACKEND] Uploading file to FastAPI...",
+    ]);
+
+    const appSection =
+      document.getElementById(
+        "app-dashboard"
+      );
+
+    if (appSection) {
+      appSection.scrollIntoView({
+        behavior: "smooth",
+      });
+    }
+
+    try {
+      const formData = new FormData();
+
+      formData.append("file", file);
+      formData.append("language", language);
+
+      let response;
+
+      try {
+        response = await fetch(
+          `${API_BASE}/api/process-upload`,
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
+      } catch (error) {
+        throw new Error(
+          `Cannot connect to FastAPI backend at ${API_BASE}. ` +
+            "Please make sure your backend is running."
+        );
+      }
+
+      if (!response.ok) {
+        let detail =
+          "Failed to upload and start analysis.";
+
+        try {
+          const errorData =
+            await response.json();
+
+          detail =
+            errorData.detail ||
+            detail;
+        } catch {
+          // Keep default message.
+        }
+
+        throw new Error(detail);
+      }
+
+      const data =
+        await response.json();
+
+      if (!data.job_id) {
+        throw new Error(
+          "Backend did not return a processing job ID."
+        );
+      }
+
+      setJobId(data.job_id);
+
+      setTerminalLogs((prev) => [
+        ...prev.slice(-8),
+        `[JOB] ${data.job_id}`,
+        "[BACKEND] File accepted successfully.",
+      ]);
+
+      /*
+        The backend job status remains exactly the
+        same as the YouTube flow.
+      */
+
+      await pollProcessingJob(
+        data.job_id,
+        startedAt,
+        file.name,
+        language
+      );
+    } catch (err) {
+      console.error(
+        "VibeLens file processing error:",
+        err
+      );
+
+      const errorMessage =
+        err?.message ||
+        "Unknown backend error.";
+
+      setPipelineError(
+        errorMessage
+      );
+
+      setPipelineState("error");
+
+      setTerminalLogs((prev) => [
+        ...prev.slice(-8),
+        `[ERROR] ${errorMessage}`,
+      ]);
+    }
+  };
+
+  /* =======================================================
      RESET WORKSPACE
   ======================================================= */
 
   const resetWorkspace = () => {
     setPipelineState("idle");
-
     setCurrentStepIndex(0);
-
     setCurrentBackendStage("idle");
-
     setProcessingMessage("");
-
     setProcessingPercent(0);
-
     setJobId(null);
-
     setProcessingStartedAt(null);
-
     setElapsedSeconds(0);
-
     setPipelineError(null);
-
     setResultData(null);
-
     setActiveTab("summary");
-
     setTranscriptSearch("");
-
     setChatInput("");
-
     setCopied(false);
-
     setDownloaded(false);
-
     setIsChatLoading(false);
+
+    setSourceInput("");
+    setSelectedFile(null);
+    setSourceType("youtube");
+    setIsDraggingFile(false);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
 
     setChatMessages([
       {
@@ -916,12 +1161,10 @@ export default function App() {
           `${API_BASE}/api/chat`,
           {
             method: "POST",
-
             headers: {
               "Content-Type":
                 "application/json",
             },
-
             body: JSON.stringify({
               question: query,
             }),
@@ -1792,35 +2035,170 @@ ${activeResult.transcript}
                   }
                   className="space-y-6"
                 >
+                  {/* SOURCE TYPE SWITCH */}
+
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">
-                      YouTube URL or Backend-Accessible Audio/Video Path
+                    <label className="block text-sm font-medium text-zinc-300 mb-3">
+                      Choose Your Source
                     </label>
 
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-zinc-500">
-                        <Video className="w-5 h-5 text-red-400" />
+                    <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-zinc-950 border border-zinc-800">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSourceType("youtube");
+                          setPipelineError(null);
+                        }}
+                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                          sourceType === "youtube"
+                            ? "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg"
+                            : "text-zinc-500 hover:text-zinc-200"
+                        }`}
+                      >
+                        <Video className="w-4 h-4" />
+                        YouTube
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSourceType("file");
+                          setPipelineError(null);
+                        }}
+                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
+                          sourceType === "file"
+                            ? "bg-gradient-to-r from-amber-500 to-amber-600 text-zinc-950 shadow-lg"
+                            : "text-zinc-500 hover:text-zinc-200"
+                        }`}
+                      >
+                        <Upload className="w-4 h-4" />
+                        Upload File
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* YOUTUBE SOURCE */}
+
+                  {sourceType === "youtube" && (
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">
+                        YouTube URL
+                      </label>
+
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-zinc-500">
+                          <Video className="w-5 h-5 text-red-400" />
+                        </div>
+
+                        <input
+                          type="text"
+                          required
+                          value={sourceInput}
+                          onChange={(e) =>
+                            setSourceInput(
+                              e.target.value
+                            )
+                          }
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          className="w-full pl-12 pr-4 py-4 bg-[#090A0F] border border-zinc-800 rounded-xl focus:outline-none focus:border-amber-500/50 text-zinc-100 placeholder-zinc-600 text-sm font-medium transition-colors"
+                        />
                       </div>
 
-                      <input
-                        type="text"
-                        required
-                        value={sourceInput}
-                        onChange={(e) =>
-                          setSourceInput(
-                            e.target.value
-                          )
-                        }
-                        placeholder="https://www.youtube.com/watch?v=..."
-                        className="w-full pl-12 pr-4 py-4 bg-[#090A0F] border border-zinc-800 rounded-xl focus:outline-none focus:border-amber-500/50 text-zinc-100 placeholder-zinc-600 text-sm font-medium transition-colors"
-                      />
+                      <p className="text-[11px] text-zinc-600 mt-2">
+                        Paste a YouTube video or Shorts URL.
+                      </p>
                     </div>
+                  )}
 
-                    <p className="text-[11px] text-zinc-600 mt-2">
-                      For local files, the path must be accessible from the
-                      FastAPI backend machine.
-                    </p>
-                  </div>
+                  {/* FILE UPLOAD */}
+
+                  {sourceType === "file" && (
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">
+                        Audio / Video File
+                      </label>
+
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".mp3,.wav,.m4a,.mp4,.mov,.webm,audio/*,video/*"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+
+                      {!selectedFile ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            fileInputRef.current?.click()
+                          }
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setIsDraggingFile(true);
+                          }}
+                          onDragLeave={() =>
+                            setIsDraggingFile(false)
+                          }
+                          onDrop={handleDrop}
+                          className={`w-full rounded-2xl border-2 border-dashed p-8 text-center transition-all ${
+                            isDraggingFile
+                              ? "border-amber-400 bg-amber-500/[0.08]"
+                              : "border-zinc-800 bg-[#090A0F] hover:border-amber-500/40 hover:bg-amber-500/[0.03]"
+                          }`}
+                        >
+                          <div className="w-14 h-14 mx-auto rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4">
+                            <Upload className="w-6 h-6 text-amber-400" />
+                          </div>
+
+                          <div className="text-sm font-bold text-zinc-200">
+                            Drop your file here
+                          </div>
+
+                          <div className="text-xs text-zinc-500 mt-2">
+                            or click to browse from your device
+                          </div>
+
+                          <div className="text-[10px] text-zinc-600 mt-4 font-mono">
+                            MP3 • WAV • M4A • MP4 • MOV • WEBM
+                          </div>
+                        </button>
+                      ) : (
+                        <div className="p-5 rounded-2xl bg-[#090A0F] border border-amber-500/20">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+                              <FileText className="w-5 h-5 text-amber-400" />
+                            </div>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-bold text-zinc-200 truncate">
+                                {selectedFile.name}
+                              </div>
+
+                              <div className="text-xs text-zinc-500 mt-1">
+                                {(
+                                  selectedFile.size /
+                                  (1024 * 1024)
+                                ).toFixed(2)}{" "}
+                                MB
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={removeSelectedFile}
+                              className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center hover:border-red-500/30 hover:text-red-400 text-zinc-500 transition-colors"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-[11px] text-zinc-600 mt-2">
+                        Start with a short 5–8 minute file for the current project.
+                      </p>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-medium text-zinc-300 mb-2">
@@ -1876,14 +2254,31 @@ ${activeResult.transcript}
                     </div>
                   </div>
 
+                  {pipelineError && (
+                    <div className="p-4 rounded-2xl bg-red-500/[0.05] border border-red-500/20 text-sm text-red-300">
+                      {pipelineError}
+                    </div>
+                  )}
+
                   <button
                     type="submit"
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-extrabold shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center space-x-2 text-base cursor-pointer"
+                    disabled={
+                      sourceType === "youtube"
+                        ? !sourceInput.trim()
+                        : !selectedFile
+                    }
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-extrabold shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center space-x-2 text-base cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <Play className="w-5 h-5" />
+                    {sourceType === "file" ? (
+                      <Upload className="w-5 h-5" />
+                    ) : (
+                      <Play className="w-5 h-5" />
+                    )}
 
                     <span>
-                      Run VibeLens Pipeline
+                      {sourceType === "file"
+                        ? "Upload & Analyze"
+                        : "Run VibeLens Pipeline"}
                     </span>
 
                     <ArrowRight className="w-5 h-5" />
@@ -2219,14 +2614,21 @@ ${activeResult.transcript}
                 <button
                   onClick={() => {
                     if (
+                      sourceType === "youtube" &&
                       sourceInput.trim()
                     ) {
-                      handleStartProcessing(
-                        {
-                          preventDefault:
-                            () => {},
-                        }
-                      );
+                      handleStartProcessing({
+                        preventDefault:
+                          () => {},
+                      });
+                    } else if (
+                      sourceType === "file" &&
+                      selectedFile
+                    ) {
+                      handleStartProcessing({
+                        preventDefault:
+                          () => {},
+                      });
                     }
                   }}
                   className="px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-zinc-950 font-bold flex items-center justify-center gap-2"
@@ -2530,8 +2932,6 @@ ${activeResult.transcript}
               {activeTab ===
                 "insights" && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* ACTION ITEMS */}
-
                   <div className="glass-panel rounded-3xl p-6 shadow-xl flex flex-col">
                     <div className="flex items-center space-x-3 mb-6">
                       <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-amber-400">
@@ -2597,8 +2997,6 @@ ${activeResult.transcript}
                     </div>
                   </div>
 
-                  {/* KEY DECISIONS */}
-
                   <div className="glass-panel rounded-3xl p-6 shadow-xl flex flex-col">
                     <div className="flex items-center space-x-3 mb-6">
                       <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-emerald-400">
@@ -2651,8 +3049,6 @@ ${activeResult.transcript}
                       )}
                     </div>
                   </div>
-
-                  {/* OPEN QUESTIONS */}
 
                   <div className="glass-panel rounded-3xl p-6 shadow-xl flex flex-col">
                     <div className="flex items-center space-x-3 mb-6">

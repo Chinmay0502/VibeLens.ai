@@ -8,7 +8,7 @@ import os
 import yt_dlp
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -255,22 +255,26 @@ def run_pipeline(
 
     except Exception as e:
         error_message = str(e)
-
-        print(
-            f"❌ Pipeline {job_id} failed: "
-            f"{type(e).__name__}: {error_message}"
-        )
-
+        print(f"❌ Pipeline {job_id} failed: {type(e).__name__}: {error_message}")
         with jobs_lock:
             if job_id in jobs:
-                jobs[job_id].update(
-                    {
-                        "status": "failed",
-                        "stage": "error",
-                        "message": error_message,
-                        "error": error_message,
-                    }
-                )
+                jobs[job_id].update({
+                    "status": "failed",
+                    "stage": "error",
+                    "message": error_message,
+                    "error": error_message,
+                })
+
+    finally:
+        # Delete uploaded files after processing.
+        if source.startswith(str(BASE_DIR / "uploads")):
+            try:
+                source_path = Path(source)
+                if source_path.exists():
+                    source_path.unlink()
+                    print(f"🧹 Deleted uploaded file: {source_path}")
+            except Exception as cleanup_error:
+                print(f"⚠️ Could not delete uploaded file: {cleanup_error}")
 
 
 @app.get("/api/health")
@@ -308,6 +312,63 @@ def process_media(req: PipelineRequest):
         "status": "processing",
     }
 
+@app.post("/api/process-upload")
+async def process_upload(file: UploadFile = File(...)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file selected.")
+
+    allowed_extensions = {
+        ".mp3",
+        ".wav",
+        ".m4a",
+        ".mp4",
+        ".mov",
+        ".webm",
+    }
+
+    extension = Path(file.filename).suffix.lower()
+
+    if extension not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file type. Please upload MP3, WAV, M4A, MP4, MOV, or WEBM.",
+        )
+
+    upload_dir = BASE_DIR / "uploads"
+    upload_dir.mkdir(exist_ok=True)
+
+    job_id = str(uuid4())
+    safe_filename = f"{job_id}{extension}"
+    file_path = upload_dir / safe_filename
+
+    try:
+        with file_path.open("wb") as buffer:
+            while chunk := await file.read(1024 * 1024):
+                buffer.write(chunk)
+    except Exception as e:
+        if file_path.exists():
+            file_path.unlink()
+        raise HTTPException(status_code=500, detail=f"Could not save uploaded file: {e}")
+    finally:
+        await file.close()
+
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "processing",
+            "stage": "queued",
+            "step": 0,
+            "message": "Analysis queued...",
+            "percent": 0,
+            "result": None,
+            "error": None,
+        }
+
+    executor.submit(run_pipeline, job_id, str(file_path), "english")
+
+    return {
+        "job_id": job_id,
+        "status": "processing",
+    }
 
 @app.get("/api/process/status/{job_id}")
 def process_status(job_id: str):
