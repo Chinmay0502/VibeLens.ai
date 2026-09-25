@@ -5,6 +5,7 @@ from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 import os
+import yt_dlp
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -46,6 +47,17 @@ try:
     text=True))
 except Exception as e:
     print("DENO CHECK FAILED:", e)
+
+try:
+    import yt_dlp
+    print("YT-DLP VERSION:", yt_dlp.version.__version__)
+
+    from yt_dlp.plugins import directories
+    print("YT-DLP PLUGIN DIRECTORIES:", directories)
+
+    print("YT-DLP PACKAGE LOCATION:", yt_dlp.__file__)
+except Exception as e:
+    print("YT-DLP PLUGIN CHECK FAILED:", repr(e))
 
 app.add_middleware(
     CORSMiddleware,
