@@ -14,17 +14,34 @@ def download_youtube_audio(url: str) -> str:
 
     ydl_opts = {
         "format": "bestaudio/best",
-        "js_runtimes": {"deno": {"path": "/opt/render/.deno/bin/deno"}},
         "outtmpl": output_path,
-        "extractor_args": {
-            "youtubepot-bgutilhttp": {"base_url": "https://vibelens-pot-provider.onrender.com"}
+        
+        # Explicitly tell yt-dlp exactly where Deno is.
+        "js_runtimes": {
+            "deno": {
+                "path": "/opt/render/project/src/.deno/bin/deno"
+            }
         },
+        
+        # Allow yt-dlp to download the YouTube EJS challenge scripts.
+        "remote_components": {
+            "ejs:npm"
+        },
+        
+        # Use the external Proof-of-Origin token provider.
+        "extractor_args": {
+            "youtubepot-bgutilhttp": {
+                "base_url": "https://vibelens-pot-provider.onrender.com"
+            }
+        },
+
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "wav",
             }
         ],
+        
         "quiet": True,
     }
 
