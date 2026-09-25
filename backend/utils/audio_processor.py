@@ -14,9 +14,8 @@ def download_youtube_audio(url: str) -> str:
 
     ydl_opts = {
         "format": "bestaudio/best",
-        "js_runtimes": {
-            "deno": {"path": "/opt/render/.deno/bin/deno"}
-                },
+        "format": "bestaudio/best",
+        "js_runtimes": ["deno:/opt/render/.deno/bin/deno"],
         "outtmpl": output_path,
         "postprocessors": [
             {
