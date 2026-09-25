@@ -62,14 +62,14 @@ try:
     print("YT-DLP EXTRACTOR PLUGIN SPEC:", plugin_spec)
 
     bgutil_spec = importlib.util.find_spec(
-        "yt_dlp_plugins.extractor.youtubepot_bgutilhttp"
+        "yt_dlp_plugins.extractor.getpot_bgutil_http"
     )
 
     print("BGUTIL HTTP PLUGIN SPEC:", bgutil_spec)
 
 except Exception as e:
     print("YT-DLP PLUGIN CHECK FAILED:", repr(e))
-    
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
